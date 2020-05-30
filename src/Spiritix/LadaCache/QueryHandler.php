@@ -11,9 +11,9 @@
 
 namespace Spiritix\LadaCache;
 
-use Exception;
-use Spiritix\LadaCache\Debug\CacheCollector;
+use ReflectionException;
 use Spiritix\LadaCache\Database\QueryBuilder;
+use Spiritix\LadaCache\Debug\CacheCollector;
 
 /**
  * Query handler is Eloquent's gateway to access the cache.
@@ -23,6 +23,7 @@ use Spiritix\LadaCache\Database\QueryBuilder;
  */
 class QueryHandler
 {
+    public $isEnableCache = true;
     /**
      * Cache instance.
      *
@@ -61,13 +62,23 @@ class QueryHandler
     /**
      * Initialize the query handler.
      *
-     * @param Cache          $cache
-     * @param Invalidator    $invalidator
+     * @param Cache $cache
+     * @param Invalidator $invalidator
      */
     public function __construct(Cache $cache, Invalidator $invalidator)
     {
         $this->cache = $cache;
         $this->invalidator = $invalidator;
+    }
+
+    function enableCache()
+    {
+        $this->isEnableCache = true;
+    }
+
+    function disableCache()
+    {
+        $this->isEnableCache = false;
     }
 
     /**
@@ -93,7 +104,7 @@ class QueryHandler
         $reflector = new Reflector($this->builder);
 
         /* @var Manager $manager */
-        $manager = new Manager($reflector);
+        $manager = new Manager($reflector, $this->isEnableCache);
 
         // Skip if caching is disabled for current query
         if (!$manager->shouldCache()) {
@@ -130,7 +141,7 @@ class QueryHandler
         $reflector = new Reflector($this->builder);
 
         /* @var Manager $manager */
-        $manager = new Manager($reflector);
+        $manager = new Manager($reflector, $this->isEnableCache);
 
         // If cache is disabled, abort already here to save time
         if (!$manager->shouldCache()) {
@@ -169,7 +180,7 @@ class QueryHandler
      * Invalidates a query.
      *
      * @param string $statementType The type of the statement that caused the invalidation
-     * @param array $values         The values to be modified
+     * @param array $values The values to be modified
      */
     public function invalidateQuery($statementType, $values = [])
     {
@@ -178,21 +189,13 @@ class QueryHandler
         /* @var Reflector $reflector */
         $reflector = new Reflector($this->builder, $statementType, $values);
 
-        /* @var Manager $manager */
-        $manager = new Manager($reflector);
-
-        // If cache is disabled, abort already here to save time
-        if (!$manager->shouldCache()) {
-            return;
-        }
-
         /* @var Tagger $tagger */
         $tagger = new Tagger($reflector);
         $tags = $tagger->getTags();
 
         $hashes = $this->invalidator->invalidate($tags);
 
-        $action = 'Invalidation (' .  $statementType . ')';
+        $action = 'Invalidation (' . $statementType . ')';
         $this->destructCollector($reflector, $tags, $hashes, $action);
     }
 
@@ -206,8 +209,7 @@ class QueryHandler
         try {
             $this->collector = app()->make('lada.collector');
             $this->collector->startMeasuring();
-        }
-        catch (Exception $e) {
+        } catch (ReflectionException $e) {
             $this->collector = null;
         }
     }
@@ -215,10 +217,10 @@ class QueryHandler
     /**
      * Destructs the collector.
      *
-     * @param Reflector    $reflector The reflector instance
-     * @param array        $tags      The tags for the executed query
-     * @param string|array $hashes    The hash(es) for the executed query
-     * @param string       $action    The action that happened
+     * @param Reflector $reflector The reflector instance
+     * @param array $tags The tags for the executed query
+     * @param string|array $hashes The hash(es) for the executed query
+     * @param string $action The action that happened
      */
     private function destructCollector(Reflector $reflector, $tags, $hashes, $action)
     {

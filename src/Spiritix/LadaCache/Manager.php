@@ -51,14 +51,15 @@ class Manager
      * Initialize manager.
      *
      * @param Reflector $reflector
+     * @param boolean $enableCache
      */
-    public function __construct(Reflector $reflector)
+    public function __construct(Reflector $reflector, $enableCache = null)
     {
         $this->reflector = $reflector;
 
-        $this->cacheActive = (bool) config('lada-cache.active');
-        $this->includeTables = (array) config('lada-cache.include-tables');
-        $this->excludeTables = (array) config('lada-cache.exclude-tables');
+        $this->cacheActive = $enableCache != null ? $enableCache : (bool)config('lada-cache.active');
+        $this->includeTables = (array)config('lada-cache.include-tables');
+        $this->excludeTables = (array)config('lada-cache.exclude-tables');
     }
 
     /**
